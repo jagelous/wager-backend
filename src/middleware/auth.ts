@@ -14,8 +14,12 @@ declare global {
     interface Request {
       user?: {
         id: number;
-        email: string;
+        email: string | null;
         role: string;
+        name: string | null;
+        avatar: string | null;
+        provider: string;
+        solanaPublicKey: string | null;
       };
     }
   }
@@ -46,6 +50,7 @@ export const authenticateToken = async (
         name: true,
         avatar: true,
         provider: true,
+        solanaPublicKey: true,
       },
     });
 

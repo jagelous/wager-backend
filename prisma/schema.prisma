@@ -8,14 +8,15 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  googleId  String?  @unique
-  email     String   @unique
-  name      String?
-  avatar    String?
-  provider  String   @default("google")
-  role      String   @default("user")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  lastLogin DateTime?
+  id              Int      @id @default(autoincrement())
+  googleId        String?  @unique
+  solanaPublicKey String?  @unique
+  email           String?  @unique
+  name            String?
+  avatar          String?
+  provider        String   @default("google")
+  role            String   @default("user")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lastLogin       DateTime?
 }

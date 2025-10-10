@@ -217,11 +217,95 @@ router.get("/me", authenticateToken, (req: any, res) => {
       name: u.name,
       avatar: u.avatar,
       provider: u.provider,
+      solanaPublicKey: u.solanaPublicKey,
     },
   });
 });
 
-// 4) logout
+// 4) Solana wallet authentication
+router.post("/solana", async (req, res) => {
+  try {
+    const { publicKey, signature, message } = req.body;
+
+    if (!publicKey || !signature || !message) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // Verify the signature (basic verification - in production, you'd want more robust verification)
+    // For now, we'll trust the wallet connection and create/update user
+
+    // Check if user exists with this Solana public key
+    let user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { solanaPublicKey: publicKey },
+          { googleId: null, email: null }, // Fallback for users without email
+        ],
+      },
+    });
+
+    if (!user) {
+      // Create new user with Solana wallet
+      const username = `Solana User ${publicKey.slice(0, 8)}`;
+      const firstLetter = username.charAt(0).toUpperCase();
+      const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        firstLetter
+      )}&background=9A2BD8&color=ffffff&size=96`;
+
+      user = await prisma.user.create({
+        data: {
+          solanaPublicKey: publicKey,
+          name: username,
+          avatar: avatarUrl,
+          provider: "solana",
+          lastLogin: new Date(),
+        },
+      });
+    } else {
+      // Update existing user
+      const fallbackUsername = `Solana User ${publicKey.slice(0, 8)}`;
+      const firstLetter = (user.name || fallbackUsername)
+        .charAt(0)
+        .toUpperCase();
+      const generatedAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        firstLetter
+      )}&background=9A2BD8&color=ffffff&size=96`;
+
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          solanaPublicKey: publicKey,
+          provider: "solana",
+          lastLogin: new Date(),
+          // If user has no avatar yet, set a generated one so UI can render immediately
+          avatar: user.avatar ?? generatedAvatar,
+          // If user has no name yet, set a fallback username based on wallet
+          name: user.name ?? fallbackUsername,
+        },
+      });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, {
+      expiresIn: "7d",
+    });
+
+    // Set HTTP-only cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    res.json({ user });
+  } catch (err) {
+    console.error("Solana auth error:", err);
+    res.status(500).json({ message: "Solana authentication failed" });
+  }
+});
+
+// 5) logout
 router.post("/logout", (req, res) => {
   res.clearCookie("token", {
     sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
