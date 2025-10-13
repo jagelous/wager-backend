@@ -2,8 +2,11 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
+import path from "path";
 import { PrismaClient } from "@prisma/client";
 import authRoutes from "./routes/auth";
+import adminRoutes from "./routes/admin";
+import legacyRoutes from "./routes/legacy";
 import { authenticateToken } from "./middleware/auth";
 
 // Load environment variables
@@ -25,6 +28,8 @@ app.use(cookieParser());
 
 // Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api", legacyRoutes);
 
 // Protected route example
 app.get("/api/profile", authenticateToken, async (req: any, res) => {
@@ -60,6 +65,13 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Serve static Admin portal from external directory
+const ADMIN_STATIC_DIR =
+  process.env.ADMIN_STATIC_DIR ||
+  path.resolve("C:\\Users\\jafil\\Documents\\GitHub\\WagerVSDev_Testing\\admin");
+
+app.use("/admin", express.static(ADMIN_STATIC_DIR, { extensions: ["html"] }));
 
 // Error handling middleware
 app.use(
