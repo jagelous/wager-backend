@@ -8,15 +8,68 @@ datasource db {
 }
 
 model User {
-  id              Int      @id @default(autoincrement())
-  googleId        String?  @unique
-  solanaPublicKey String?  @unique
-  email           String?  @unique
+  id              Int           @id @default(autoincrement())
+  googleId        String?       @unique
+  solanaPublicKey String?       @unique
+  email           String?       @unique
   name            String?
   avatar          String?
-  provider        String   @default("google")
-  role            String   @default("user")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  provider        String        @default("google")
+  role            String        @default("user")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
   lastLogin       DateTime?
+  wagers          Wager[]
+  wallet          Wallet?
+  transactions    Transaction[]
+}
+
+model Wager {
+  id            Int      @id @default(autoincrement())
+  name          String
+  description   String?
+  imageUrl      String?
+  category      String   // crypto, basketball, football, events
+  side1         String
+  side2         String
+  wagerEndTime  DateTime
+  isPublic      Boolean  @default(true)
+  winningSide   String?
+  wagerStatus   String   @default("active") // active, ended
+  side1Amount   Float    @default(0)
+  side2Amount   Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdById   Int
+  createdBy     User     @relation(fields: [createdById], references: [id])
+}
+
+model Wallet {
+  id           Int          @id @default(autoincrement())
+  userId       Int          @unique
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  solAmount    Float        @default(0)
+  usdcAmount   Float        @default(0)
+  vsAmount     Float        @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  transactions Transaction[]
+}
+
+model Transaction {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  walletId      Int
+  wallet        Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  type          String   // "purchase", "deposit", "withdrawal"
+  currency      String   // "SOL", "USDC", "VS"
+  amount        Float    // Amount of currency spent
+  vsAmount      Float    // Amount of VS tokens received
+  solPrice      Float?   // SOL price at time of transaction
+  usdValue      Float?   // USD value of transaction
+  status        String   @default("completed") // "pending", "completed", "failed"
+  transactionHash String? // Blockchain transaction hash
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
