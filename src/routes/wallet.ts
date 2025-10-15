@@ -98,7 +98,7 @@ router.get("/info", authenticateToken, async (req: any, res) => {
           userId: user.id,
           solAmount: initialSolAmount,
           usdcAmount: 0,
-          vsAmount: 0,
+          vsAmount: 20000, // Give new users 20,000 VS tokens
           updatedAt: new Date(),
         },
       });
@@ -174,7 +174,7 @@ router.post("/purchase", authenticateToken, async (req: any, res) => {
           userId: req.user.id,
           solAmount: initialSolAmount,
           usdcAmount: 0,
-          vsAmount: 0,
+          vsAmount: 20000, // Give new users 20,000 VS tokens
           updatedAt: new Date(),
         },
       });
@@ -351,7 +351,7 @@ router.put("/balances", authenticateToken, async (req: any, res) => {
           userId: req.user.id,
           solAmount: initialSolAmount,
           usdcAmount: 0,
-          vsAmount: 0,
+          vsAmount: 20000, // Give new users 20,000 VS tokens
           updatedAt: new Date(),
         },
       });
