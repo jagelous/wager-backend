@@ -7,6 +7,7 @@ import { PrismaClient } from "@prisma/client";
 import authRoutes from "./routes/auth";
 import wagerRoutes from "./routes/wager";
 import walletRoutes from "./routes/wallet";
+import prizeRoutes from "./routes/prize";
 import { authenticateToken } from "./middleware/auth";
 
 dotenv.config();
@@ -29,6 +30,7 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 app.use("/api/auth", authRoutes);
 app.use("/api/wagers", wagerRoutes);
 app.use("/api/wallet", walletRoutes);
+app.use("/api", prizeRoutes);
 
 app.get("/api/profile", authenticateToken, async (req: any, res) => {
   try {
