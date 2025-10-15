@@ -8,6 +8,41 @@ import { authenticateToken } from "../middleware/auth";
 const router = express.Router();
 const prisma = new PrismaClient();
 
+const updateExpiredWagers = async () => {
+  try {
+    const now = new Date();
+    const expiredWagers = await prisma.wager.findMany({
+      where: {
+        wagerStatus: "active",
+        wagerEndTime: {
+          lt: now,
+        },
+      },
+    });
+
+    if (expiredWagers.length > 0) {
+      await prisma.wager.updateMany({
+        where: {
+          wagerStatus: "active",
+          wagerEndTime: {
+            lt: now,
+          },
+        },
+        data: {
+          wagerStatus: "ended",
+          updatedAt: new Date(),
+        },
+      });
+
+      console.log(
+        `Updated ${expiredWagers.length} expired wagers to ended status`
+      );
+    }
+  } catch (error) {
+    console.error("Error updating expired wagers:", error);
+  }
+};
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = path.join(__dirname, "../../uploads");
@@ -104,6 +139,7 @@ router.post(
           wagerEndTime: new Date(wagerEndTime),
           isPublic: isPublic === "true" || isPublic === true,
           createdById: req.user.id,
+          updatedAt: new Date(),
         },
       });
 
@@ -120,12 +156,16 @@ router.post(
 
 router.get("/", async (req, res) => {
   try {
+    await updateExpiredWagers();
+
     const { status, category, isPublic } = req.query;
 
     const where: any = {};
 
     if (status) {
       where.wagerStatus = status;
+    } else {
+      where.wagerStatus = "active";
     }
 
     if (category) {
@@ -138,15 +178,6 @@ router.get("/", async (req, res) => {
 
     const wagers = await prisma.wager.findMany({
       where,
-      include: {
-        createdBy: {
-          select: {
-            id: true,
-            name: true,
-            avatar: true,
-          },
-        },
-      },
       orderBy: {
         createdAt: "desc",
       },
@@ -161,23 +192,20 @@ router.get("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   try {
+    await updateExpiredWagers();
+
     const { id } = req.params;
 
     const wager = await prisma.wager.findUnique({
       where: { id: parseInt(id) },
-      include: {
-        createdBy: {
-          select: {
-            id: true,
-            name: true,
-            avatar: true,
-          },
-        },
-      },
     });
 
     if (!wager) {
       return res.status(404).json({ error: "Wager not found" });
+    }
+
+    if (wager.wagerStatus === "ended") {
+      return res.status(404).json({ error: "Wager has ended" });
     }
 
     res.json(wager);
@@ -219,6 +247,103 @@ router.put("/:id", authenticateToken, async (req: any, res) => {
   } catch (error) {
     console.error("Update wager error:", error);
     res.status(500).json({ error: "Failed to update wager" });
+  }
+});
+
+router.post("/:id/predict", authenticateToken, async (req: any, res) => {
+  try {
+    await updateExpiredWagers();
+
+    const { id } = req.params;
+    const { side, amount } = req.body;
+
+    if (!side || !amount) {
+      return res.status(400).json({ error: "Side and amount are required" });
+    }
+
+    if (side !== "side1" && side !== "side2") {
+      return res.status(400).json({ error: "Side must be 'side1' or 'side2'" });
+    }
+
+    const wager = await prisma.wager.findUnique({
+      where: { id: parseInt(id) },
+    });
+
+    if (!wager) {
+      return res.status(404).json({ error: "Wager not found" });
+    }
+
+    if (wager.wagerStatus !== "active") {
+      return res.status(400).json({ error: "Wager is not active" });
+    }
+
+    const now = new Date();
+    const endTime = new Date(wager.wagerEndTime);
+    if (now >= endTime) {
+      await prisma.wager.update({
+        where: { id: parseInt(id) },
+        data: {
+          wagerStatus: "ended",
+          updatedAt: new Date(),
+        },
+      });
+      return res.status(400).json({ error: "Wager has ended" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { wallet: true },
+    });
+
+    if (!user || !user.wallet) {
+      return res.status(400).json({ error: "User wallet not found" });
+    }
+
+    const predictionAmount = parseFloat(amount);
+    if (user.wallet.vsAmount < predictionAmount) {
+      return res.status(400).json({ error: "Insufficient VS tokens" });
+    }
+
+    const updatedWager = await prisma.wager.update({
+      where: { id: parseInt(id) },
+      data: {
+        [side === "side1" ? "side1Amount" : "side2Amount"]: {
+          increment: predictionAmount,
+        },
+        updatedAt: new Date(),
+      },
+    });
+
+    const updatedWallet = await prisma.wallet.update({
+      where: { id: user.wallet.id },
+      data: {
+        vsAmount: user.wallet.vsAmount - predictionAmount,
+        updatedAt: new Date(),
+      },
+    });
+
+    await prisma.transaction.create({
+      data: {
+        userId: req.user.id,
+        walletId: user.wallet.id,
+        type: "prediction",
+        currency: "VS",
+        amount: predictionAmount,
+        vsAmount: -predictionAmount,
+        status: "completed",
+        updatedAt: new Date(),
+      },
+    });
+
+    res.json({
+      success: true,
+      message: "Prediction placed successfully",
+      wager: updatedWager,
+      wallet: updatedWallet,
+    });
+  } catch (error) {
+    console.error("Make prediction error:", error);
+    res.status(500).json({ error: "Failed to make prediction" });
   }
 });
 

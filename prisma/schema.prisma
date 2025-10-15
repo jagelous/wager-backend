@@ -7,69 +7,74 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
+model transaction {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  walletId        Int
+  type            String
+  currency        String
+  amount          Float
+  vsAmount        Float
+  solPrice        Float?
+  usdValue        Float?
+  status          String   @default("completed")
+  transactionHash String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime
+  user            user     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "Transaction_userId_fkey")
+  wallet          wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade, map: "Transaction_walletId_fkey")
+
+  @@index([userId], map: "Transaction_userId_fkey")
+  @@index([walletId], map: "Transaction_walletId_fkey")
+}
+
+model user {
   id              Int           @id @default(autoincrement())
-  googleId        String?       @unique
-  solanaPublicKey String?       @unique
-  email           String?       @unique
+  googleId        String?       @unique(map: "User_googleId_key")
+  email           String?       @unique(map: "User_email_key")
   name            String?
   avatar          String?
   provider        String        @default("google")
   role            String        @default("user")
   createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  updatedAt       DateTime
   lastLogin       DateTime?
-  wagers          Wager[]
-  wallet          Wallet?
-  transactions    Transaction[]
+  solanaPublicKey String?       @unique(map: "User_solanaPublicKey_key")
+  transaction     transaction[]
+  wager           wager[]
+  wallet          wallet?
 }
 
-model Wager {
-  id            Int      @id @default(autoincrement())
-  name          String
-  description   String?
-  imageUrl      String?
-  category      String   // crypto, basketball, football, events
-  side1         String
-  side2         String
-  wagerEndTime  DateTime
-  isPublic      Boolean  @default(true)
-  winningSide   String?
-  wagerStatus   String   @default("active") // active, ended
-  side1Amount   Float    @default(0)
-  side2Amount   Float    @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  createdById   Int
-  createdBy     User     @relation(fields: [createdById], references: [id])
+model wager {
+  id           Int      @id @default(autoincrement())
+  name         String
+  description  String?
+  imageUrl     String?
+  category     String
+  side1        String
+  side2        String
+  wagerEndTime DateTime
+  isPublic     Boolean  @default(true)
+  winningSide  String?
+  wagerStatus  String   @default("active")
+  side1Amount  Float    @default(0)
+  side2Amount  Float    @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+  createdById  Int
+  user         user     @relation(fields: [createdById], references: [id], map: "Wager_createdById_fkey")
+
+  @@index([createdById], map: "Wager_createdById_fkey")
 }
 
-model Wallet {
-  id           Int          @id @default(autoincrement())
-  userId       Int          @unique
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  solAmount    Float        @default(0)
-  usdcAmount   Float        @default(0)
-  vsAmount     Float        @default(0)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  transactions Transaction[]
-}
-
-model Transaction {
-  id            Int      @id @default(autoincrement())
-  userId        Int
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  walletId      Int
-  wallet        Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  type          String   // "purchase", "deposit", "withdrawal"
-  currency      String   // "SOL", "USDC", "VS"
-  amount        Float    // Amount of currency spent
-  vsAmount      Float    // Amount of VS tokens received
-  solPrice      Float?   // SOL price at time of transaction
-  usdValue      Float?   // USD value of transaction
-  status        String   @default("completed") // "pending", "completed", "failed"
-  transactionHash String? // Blockchain transaction hash
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+model wallet {
+  id          Int           @id @default(autoincrement())
+  userId      Int           @unique(map: "Wallet_userId_key")
+  solAmount   Float         @default(0)
+  usdcAmount  Float         @default(0)
+  vsAmount    Float         @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime
+  transaction transaction[]
+  user        user          @relation(fields: [userId], references: [id], onDelete: Cascade, map: "Wallet_userId_fkey")
 }

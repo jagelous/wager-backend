@@ -53,6 +53,7 @@ router.post("/google", async (req, res) => {
           avatar: picture,
           googleId: id,
           provider: "google",
+          updatedAt: new Date(),
         },
       });
     } else {
@@ -65,6 +66,7 @@ router.post("/google", async (req, res) => {
             name: user.name || name,
             avatar: user.avatar || picture,
             lastLogin: new Date(),
+            updatedAt: new Date(),
           },
         });
       } else {
@@ -74,6 +76,7 @@ router.post("/google", async (req, res) => {
             lastLogin: new Date(),
             name: user.name || name,
             avatar: user.avatar || picture,
+            updatedAt: new Date(),
           },
         });
       }
@@ -154,6 +157,7 @@ router.get("/google/callback", async (req, res) => {
             avatar: picture,
             provider: "google",
             lastLogin: new Date(),
+            updatedAt: new Date(),
           },
         });
       }
@@ -164,6 +168,7 @@ router.get("/google/callback", async (req, res) => {
           lastLogin: new Date(),
           name: user.name || name,
           avatar: user.avatar || picture,
+          updatedAt: new Date(),
         },
       });
     }
@@ -230,6 +235,7 @@ router.post("/solana", async (req, res) => {
           avatar: avatarUrl,
           provider: "solana",
           lastLogin: new Date(),
+          updatedAt: new Date(),
         },
       });
     } else {
@@ -249,6 +255,7 @@ router.post("/solana", async (req, res) => {
           lastLogin: new Date(),
           avatar: user.avatar ?? generatedAvatar,
           name: user.name ?? fallbackUsername,
+          updatedAt: new Date(),
         },
       });
     }

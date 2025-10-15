@@ -21,8 +21,33 @@ router.post("/connect", authenticateToken, async (req: any, res) => {
 
     const user = await prisma.user.update({
       where: { id: req.user.id },
-      data: { solanaPublicKey: publicKey },
+      data: {
+        solanaPublicKey: publicKey,
+        updatedAt: new Date(),
+      },
     });
+
+    let wallet = await prisma.wallet.findUnique({
+      where: { userId: user.id },
+    });
+
+    if (wallet) {
+      try {
+        const solanaInfo = await getWalletInfo(publicKey);
+        await prisma.wallet.update({
+          where: { id: wallet.id },
+          data: {
+            solAmount: solanaInfo.balance.sol,
+            updatedAt: new Date(),
+          },
+        });
+      } catch (error) {
+        console.error(
+          "Error updating SOL balance after wallet connection:",
+          error
+        );
+      }
+    }
 
     res.json({
       success: true,
@@ -57,12 +82,24 @@ router.get("/info", authenticateToken, async (req: any, res) => {
 
     let wallet = user.wallet;
     if (!wallet) {
+      let initialSolAmount = 0;
+
+      if (user.solanaPublicKey) {
+        try {
+          const solanaInfo = await getWalletInfo(user.solanaPublicKey);
+          initialSolAmount = solanaInfo.balance.sol;
+        } catch (error) {
+          console.error("Error fetching SOL balance for new wallet:", error);
+        }
+      }
+
       wallet = await prisma.wallet.create({
         data: {
           userId: user.id,
-          solAmount: 0,
+          solAmount: initialSolAmount,
           usdcAmount: 0,
           vsAmount: 0,
+          updatedAt: new Date(),
         },
       });
     }
@@ -121,12 +158,24 @@ router.post("/purchase", authenticateToken, async (req: any, res) => {
     });
 
     if (!wallet) {
+      let initialSolAmount = 0;
+
+      if (req.user.solanaPublicKey) {
+        try {
+          const solanaInfo = await getWalletInfo(req.user.solanaPublicKey);
+          initialSolAmount = solanaInfo.balance.sol;
+        } catch (error) {
+          console.error("Error fetching SOL balance for new wallet:", error);
+        }
+      }
+
       wallet = await prisma.wallet.create({
         data: {
           userId: req.user.id,
-          solAmount: 0,
+          solAmount: initialSolAmount,
           usdcAmount: 0,
           vsAmount: 0,
+          updatedAt: new Date(),
         },
       });
     }
@@ -178,6 +227,7 @@ router.post("/purchase", authenticateToken, async (req: any, res) => {
             typeof transactionSignature === "string"
               ? transactionSignature
               : transactionSignature?.signature || null,
+          updatedAt: new Date(),
         },
       });
 
@@ -217,6 +267,7 @@ router.post("/purchase", authenticateToken, async (req: any, res) => {
           vsAmount: parseFloat(vsAmount),
           usdValue: parseFloat(amount),
           status: "completed",
+          updatedAt: new Date(),
         },
       });
 
@@ -284,12 +335,24 @@ router.put("/balances", authenticateToken, async (req: any, res) => {
     });
 
     if (!wallet) {
+      let initialSolAmount = 0;
+
+      if (req.user.solanaPublicKey) {
+        try {
+          const solanaInfo = await getWalletInfo(req.user.solanaPublicKey);
+          initialSolAmount = solanaInfo.balance.sol;
+        } catch (error) {
+          console.error("Error fetching SOL balance for new wallet:", error);
+        }
+      }
+
       wallet = await prisma.wallet.create({
         data: {
           userId: req.user.id,
-          solAmount: 0,
+          solAmount: initialSolAmount,
           usdcAmount: 0,
           vsAmount: 0,
+          updatedAt: new Date(),
         },
       });
     }
