@@ -8,6 +8,102 @@ import { authenticateToken } from "../middleware/auth";
 const router = express.Router();
 const prisma = new PrismaClient();
 
+const calculatePayouts = async (wagerId: number, winningSide: string) => {
+  try {
+    const wager = await prisma.wager.findUnique({
+      where: { id: wagerId },
+    });
+
+    if (!wager) {
+      throw new Error("Wager not found");
+    }
+
+    const T = wager.side1Amount + wager.side2Amount;
+    const P = T * 0.89;
+    const C = winningSide === "side1" ? wager.side1Amount : wager.side2Amount;
+    const R = 0.00002;
+
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        wagerId: wagerId,
+        type: "prediction",
+        currency: "VS",
+        side: winningSide,
+      } as any,
+    });
+
+    const userWagers = new Map<number, number>();
+    transactions.forEach((transaction) => {
+      const current = userWagers.get(transaction.userId) || 0;
+      userWagers.set(
+        transaction.userId,
+        current + Math.abs(transaction.amount)
+      );
+    });
+
+    const payouts = [];
+    for (const [userId, userWagered] of userWagers) {
+      const Ui = userWagered;
+      const Wi = (Ui / C) * P * R;
+
+      if (Wi > 0) {
+        payouts.push({
+          userId,
+          payoutUsdc: Wi,
+          wageredTokens: Ui,
+        });
+      }
+    }
+
+    return payouts;
+  } catch (error) {
+    console.error("Error calculating payouts:", error);
+    throw error;
+  }
+};
+
+const distributePayouts = async (wagerId: number, payouts: any[]) => {
+  try {
+    for (const payout of payouts) {
+      await prisma.wallet.updateMany({
+        where: { userId: payout.userId },
+        data: {
+          usdcAmount: {
+            increment: payout.payoutUsdc,
+          },
+          updatedAt: new Date(),
+        },
+      });
+
+      const user = await prisma.user.findUnique({
+        where: { id: payout.userId },
+        include: { wallet: true },
+      });
+
+      if (user && user.wallet) {
+        await prisma.transaction.create({
+          data: {
+            userId: payout.userId,
+            walletId: user.wallet.id,
+            wagerId: wagerId,
+            type: "payout",
+            currency: "USDC",
+            amount: payout.payoutUsdc,
+            vsAmount: 0,
+            usdValue: payout.payoutUsdc,
+            side: null,
+            status: "completed",
+            updatedAt: new Date(),
+          } as any,
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Error distributing payouts:", error);
+    throw error;
+  }
+};
+
 const updateExpiredWagers = async () => {
   try {
     const now = new Date();
@@ -21,18 +117,27 @@ const updateExpiredWagers = async () => {
     });
 
     if (expiredWagers.length > 0) {
-      await prisma.wager.updateMany({
-        where: {
-          wagerStatus: "active",
-          wagerEndTime: {
-            lt: now,
+      for (const wager of expiredWagers) {
+        await prisma.wager.update({
+          where: { id: wager.id },
+          data: {
+            wagerStatus: "ended",
+            winningSide: "side1",
+            updatedAt: new Date(),
           },
-        },
-        data: {
-          wagerStatus: "ended",
-          updatedAt: new Date(),
-        },
-      });
+        });
+
+        try {
+          const payouts = await calculatePayouts(wager.id, "side1");
+          await distributePayouts(wager.id, payouts);
+          console.log(`Distributed payouts for wager ${wager.id}`);
+        } catch (error) {
+          console.error(
+            `Error processing payouts for wager ${wager.id}:`,
+            error
+          );
+        }
+      }
 
       console.log(
         `Updated ${expiredWagers.length} expired wagers to ended status`
@@ -238,10 +343,27 @@ router.put("/:id", authenticateToken, async (req: any, res) => {
     if (winningSide !== undefined) updateData.winningSide = winningSide;
     if (wagerStatus !== undefined) updateData.wagerStatus = wagerStatus;
 
+    if (wagerStatus === "ended" && !winningSide) {
+      updateData.winningSide = "side1";
+    }
+
     const wager = await prisma.wager.update({
       where: { id: parseInt(id) },
       data: updateData,
     });
+
+    if (wagerStatus === "ended") {
+      const finalWinningSide = winningSide || "side1";
+      try {
+        const payouts = await calculatePayouts(parseInt(id), finalWinningSide);
+        await distributePayouts(parseInt(id), payouts);
+        console.log(
+          `Distributed payouts for wager ${id} with winning side: ${finalWinningSide}`
+        );
+      } catch (error) {
+        console.error(`Error processing payouts for wager ${id}:`, error);
+      }
+    }
 
     res.json({ success: true, wager });
   } catch (error) {
@@ -330,9 +452,11 @@ router.post("/:id/predict", authenticateToken, async (req: any, res) => {
         currency: "VS",
         amount: predictionAmount,
         vsAmount: -predictionAmount,
+        wagerId: parseInt(id),
+        side: side,
         status: "completed",
         updatedAt: new Date(),
-      },
+      } as any,
     });
 
     res.json({

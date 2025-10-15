@@ -11,6 +11,7 @@ model transaction {
   id              Int      @id @default(autoincrement())
   userId          Int
   walletId        Int
+  wagerId         Int?
   type            String
   currency        String
   amount          Float
@@ -19,13 +20,16 @@ model transaction {
   usdValue        Float?
   status          String   @default("completed")
   transactionHash String?
+  side            String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime
   user            user     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "Transaction_userId_fkey")
   wallet          wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade, map: "Transaction_walletId_fkey")
+  wager           wager?   @relation(fields: [wagerId], references: [id], onDelete: SetNull, map: "Transaction_wagerId_fkey")
 
   @@index([userId], map: "Transaction_userId_fkey")
   @@index([walletId], map: "Transaction_walletId_fkey")
+  @@index([wagerId], map: "Transaction_wagerId_fkey")
 }
 
 model user {
@@ -46,7 +50,7 @@ model user {
 }
 
 model wager {
-  id           Int      @id @default(autoincrement())
+  id           Int           @id @default(autoincrement())
   name         String
   description  String?
   imageUrl     String?
@@ -54,15 +58,16 @@ model wager {
   side1        String
   side2        String
   wagerEndTime DateTime
-  isPublic     Boolean  @default(true)
+  isPublic     Boolean       @default(true)
   winningSide  String?
-  wagerStatus  String   @default("active")
-  side1Amount  Float    @default(0)
-  side2Amount  Float    @default(0)
-  createdAt    DateTime @default(now())
+  wagerStatus  String        @default("active")
+  side1Amount  Float         @default(0)
+  side2Amount  Float         @default(0)
+  createdAt    DateTime      @default(now())
   updatedAt    DateTime
   createdById  Int
-  user         user     @relation(fields: [createdById], references: [id], map: "Wager_createdById_fkey")
+  user         user          @relation(fields: [createdById], references: [id], map: "Wager_createdById_fkey")
+  transaction  transaction[]
 
   @@index([createdById], map: "Wager_createdById_fkey")
 }
