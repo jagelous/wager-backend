@@ -25,7 +25,8 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+// Serve the same directory where multer stores files (dist/uploads in production)
+app.use("/uploads", express.static(path.join(__dirname, "./uploads")));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/wagers", wagerRoutes);
