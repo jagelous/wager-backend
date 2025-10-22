@@ -10,6 +10,115 @@ import {
 
 const router = express.Router();
 const prisma = new PrismaClient();
+const DAILY_CLAIM_AMOUNT = 2000; // VS tokens per daily claim
+
+function isSameUtcDay(a: Date, b: Date) {
+  return (
+    a.getUTCFullYear() === b.getUTCFullYear() &&
+    a.getUTCMonth() === b.getUTCMonth() &&
+    a.getUTCDate() === b.getUTCDate()
+  );
+}
+
+router.get("/daily-status", authenticateToken, async (req: any, res) => {
+  try {
+    const lastClaim = await prisma.transaction.findFirst({
+      where: { userId: req.user.id, type: "daily_claim" },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+
+    const now = new Date();
+    const eligible =
+      !lastClaim || !isSameUtcDay(new Date(lastClaim.createdAt), now);
+
+    // Next reset is next UTC midnight
+    const nextReset = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() + 1,
+        0,
+        0,
+        0
+      )
+    );
+
+    res.json({
+      eligible,
+      lastClaimAt: lastClaim?.createdAt ?? null,
+      nextResetAt: nextReset.toISOString(),
+      amount: DAILY_CLAIM_AMOUNT,
+    });
+  } catch (error) {
+    console.error("Daily status error:", error);
+    res.status(500).json({ error: "Failed to get daily status" });
+  }
+});
+
+router.post("/daily-claim", authenticateToken, async (req: any, res) => {
+  try {
+    const lastClaim = await prisma.transaction.findFirst({
+      where: { userId: req.user.id, type: "daily_claim" },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+
+    const now = new Date();
+    if (lastClaim && isSameUtcDay(new Date(lastClaim.createdAt), now)) {
+      return res.status(400).json({ error: "Already claimed today" });
+    }
+
+    let wallet = await prisma.wallet.findUnique({
+      where: { userId: req.user.id },
+    });
+    if (!wallet) {
+      wallet = await prisma.wallet.create({
+        data: {
+          userId: req.user.id,
+          solAmount: 0,
+          usdcAmount: 0,
+          vsAmount: 20000 + DAILY_CLAIM_AMOUNT, // include signup bonus if created now
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      wallet = await prisma.wallet.update({
+        where: { userId: req.user.id },
+        data: {
+          vsAmount: wallet.vsAmount + DAILY_CLAIM_AMOUNT,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    await prisma.transaction.create({
+      data: {
+        userId: req.user.id,
+        walletId: wallet.id,
+        type: "daily_claim",
+        currency: "VS",
+        amount: 0,
+        vsAmount: DAILY_CLAIM_AMOUNT,
+        status: "completed",
+        updatedAt: new Date(),
+      },
+    });
+
+    res.json({
+      success: true,
+      amount: DAILY_CLAIM_AMOUNT,
+      balances: {
+        sol: wallet.solAmount,
+        usdc: wallet.usdcAmount,
+        vs: wallet.vsAmount,
+      },
+    });
+  } catch (error) {
+    console.error("Daily claim error:", error);
+    res.status(500).json({ error: "Failed to claim daily tokens" });
+  }
+});
 
 router.post("/connect", authenticateToken, async (req: any, res) => {
   try {
